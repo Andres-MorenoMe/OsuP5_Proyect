@@ -88,16 +88,21 @@ const efectoError = (texto, c) => function (o) {
   const tInicio = tiemposPulso[llave];
   if (!tInicio) return;
 
-  const progreso = constrain((millis() - tInicio) / tiempoClick, 0, 1);
+  const progreso = constrain((millis() - tInicio) / tiempoClick, 0,2.6);
+
+  //se le asigna un color que puede desvanecerse
+let colorDesvanecido = color(c);
+  // map convierte el progreso (de 0 a 2.6) en opacidad (de 255 a 0)
+  colorDesvanecido.setAlpha(map(progreso, 0,2.6, 255, 0));
   
   noStroke();
-  fill(c);
+  fill(colorDesvanecido);
   const len = Quadrille.cellLength;
-  textSize(len * 0.5);
+  textSize(len * 0.6);
   text(texto, len / 2, len / 2);
 
-  //  cuando pasa 2.25s (progreso = 1.5), se auto-destruye
-  if (progreso >= 1.5) {
+  //  cuando pasa 3s (progreso = 2.6), se auto-destruye
+  if (progreso >= 2.6) {
     game.clear(o.row, o.col);
     delete tiemposPulso[llave];
   }
@@ -125,7 +130,7 @@ function endEfect(row,col,tiempoInicio){
     }
  }
 
-function verificarError(row,col){
+function verificarTimeout(row,col){
 let tiempoInicial= tiemposPulso[`${row},${col}`];
 let limite=1800;
 let difer=int(millis())-tiempoInicial;
@@ -159,7 +164,7 @@ function draw() {
   for (let row = 0; row < n; row++) {
 
     for (let col = 0; col < n; col++) {
-        verificarError(row,col);
+        verificarTimeout(row,col);
       //
       }
   }
