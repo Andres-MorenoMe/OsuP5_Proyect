@@ -1,5 +1,5 @@
 'use strict';
-
+// hola github
 const BOARD = 450;//Ancho y largo del tablero
 const pulso = ['1', '2', '3', '4', '5', '6'];
 
