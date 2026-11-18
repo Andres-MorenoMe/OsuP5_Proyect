@@ -2,7 +2,7 @@
 
 const BOARD = 450;//Ancho y largo del tablero
 const pulso = ['1', '2', '3', '4', '5', '6'];
-
+let icolor =1;
 let game;
 let n=8;// numero de columnas y filas
 
@@ -145,8 +145,10 @@ const stack = (...fx) => function (o) {
 };// es la funcion que permite apilar efectos
 
 const EFFECTS = [
- stack(halo('#ffffff'),spot('#f98eff'),borde('#ffffff')),
-  stack(halo('#ffffff'),spot('#23e2ff'),borde('#ffffff'))
+  stack(halo('#ffffff'),spot('#ff9ed2'),borde('#ffffff')),
+  stack(halo('#ffffff'),spot('#23e2ff'),borde('#ffffff')),
+  stack(halo('#ffffff'),spot('#80ff9f'),borde('#ffffff')),
+  stack(halo('#ffffff'),spot('#ffea80'),borde('#ffffff'))
 ];
 
 let ipulso = 0;
@@ -158,15 +160,6 @@ function esFinDeJuego() {
   return vida <= 0;
 }
 
-function endEfect(row,col,tiempoInicio){
-  let diferencia= int(millis())-tiempoInicio;
-  let duracion= 1500;
-  if(diferencia>=duracion){
-  game.clear(row,col);
-  delete tiemposPulso[`${row},${col}`];
-  delete penalizadas[`${row},${col}`];
-    }
- }
 
 function verificarTimeout(row,col){
 const llave = `${row},${col}`;
@@ -310,8 +303,23 @@ function generador() {
     const llave = `${row},${col}`;
     delete penalizadas[llave];
 
-    ipulso = (ipulso + 1) % pulso.length;
-    game.fill(row, col, EFFECTS[ipulso % EFFECTS.length]);
+   
+
+    
+    //se obtiene el numero del arreglo
+    let numeroActual = pulso[ipulso];
+    //se obtiene el diseño de pulso que se va a utilizar
+    let diseñoCirculo = EFFECTS[icolor];
+    //usando stack se pone el numero del pulso
+    game.fill(row, col, stack(diseñoCirculo, caracter(numeroActual, '#ffffff')));
+
+    //se avanza en el orden del pulso
+     ipulso = (ipulso + 1) % pulso.length;
+    //Si ipulso volvió a 0 (completó los 6 números), cambiamos de color.
+    // Si llega al final de los 4 colores, el módulo (%) lo devuelve al primer color (0).
+    if (ipulso === 0) {
+      icolor = (icolor + 1) % EFFECTS.length;
+    }
 
     tiemposPulso[llave] = millis();
     //se guardan las coordenadas del pulso generdo en la matriz
@@ -352,7 +360,6 @@ function mousePressed() {
       game.fill(row, col, stack(haloWin('#80ed99'), textoWin(`¡PERFECTO!\n+${puntosGanados}`, '#80ed99')));
       
       tiemposPulso[llave]=millis();
-      endEfect(row,col,millis());
       // Reiniciamos si el tablero se llenó en algún momento
       if (game.order === game.size) {
         newRound();
