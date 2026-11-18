@@ -77,7 +77,7 @@ const haloWin = c => function (o) {
   //se utiliza elobjeto automatico o para saber    las coordenadas
   const tInicio = tiemposPulso[llave];
   const amp = motionData.amp;
-  const progreso = constrain((millis() -  tInicio) / tiempoClick, 0, 1);
+  const progreso = constrain((millis() - tInicio) / 500, 0, 1);
   let colorOpaco = color(c);
   colorOpaco.setAlpha(255 * (1 - progreso)); 
   stroke(colorOpaco);
@@ -98,7 +98,7 @@ const textoWin = (texto, c) => function (o) {
   const tInicio = tiemposPulso[llave];
   if (!tInicio) return;
 
-  const progreso = constrain((millis() - tInicio) / tiempoClick, 0, 1);
+  const progreso = constrain((millis() - tInicio) / 500, 0, 1);;
   let colorOpaco = color(c);
   colorOpaco.setAlpha(255 * (1 - progreso));
 
@@ -119,12 +119,10 @@ const efectoError = (texto, c) => function (o) {
   const tInicio = tiemposPulso[llave];
   if (!tInicio) return;
 
-  const progreso = constrain((millis() - tInicio) / tiempoClick, 0,2.6);
+  const progreso = constrain((millis() - tInicio) / 500, 0, 1);
 
-  //se le asigna un color que puede desvanecerse
-let colorDesvanecido = color(c);
-  // map convierte el progreso (de 0 a 2.6) en opacidad (de 255 a 0)
-  colorDesvanecido.setAlpha(map(progreso, 0,2.6, 255, 0));
+  let colorDesvanecido = color(c);
+  colorDesvanecido.setAlpha(map(progreso, 0, 1, 255, 0));
   
   noStroke();
   fill(colorDesvanecido);
@@ -132,8 +130,7 @@ let colorDesvanecido = color(c);
   textSize(len * 0.6);
   text(texto, len / 2, len / 2);
 
-  //  cuando pasa 3s (progreso = 2.6), se auto-destruye
-  if (progreso >= 2.6) {
+  if (progreso >= 1) {
     game.clear(o.row, o.col);
     delete tiemposPulso[llave];
     delete penalizadas[llave];
@@ -162,19 +159,20 @@ function esFinDeJuego() {
 
 
 function verificarTimeout(row,col){
-const llave = `${row},${col}`;
-let tiempoInicial= tiemposPulso[llave];
-if (!tiempoInicial || penalizadas[llave]) return;
-let limite=1800;
-let difer=int(millis())-tiempoInicial;
+  const llave = `${row},${col}`;
+  let tiempoInicial= tiemposPulso[llave];
+  if (!tiempoInicial || penalizadas[llave]) return;
+  let limite=1800;
+  let difer=int(millis())-tiempoInicial;
+  
   if(difer>=limite){
-  penalizadas[llave] = true;
-  fallos++;
-  racha = 0;
-  vida = constrain(vida - 20, 0, VIDA_MAX);
-  game.fill(row, col,efectoError('X','#ff4d6d'));
+    penalizadas[llave] = true;
+    fallos++;
+    racha = 0;
+    vida = constrain(vida - 20, 0, VIDA_MAX);
+    tiemposPulso[llave] = millis();
+    game.fill(row, col,efectoError('X','#ff4d6d'));
   }
-  ;
 }
 
 function setup() {
@@ -343,33 +341,47 @@ function mousePressed() {
     //si la celda es valida y tiene un pulso
      
 
-    // 2. Definimos una tolerancia (0 es perfecto, 0.15 es un buen margen para humanos)
     if (diferencia<=margenError) {
       contador++;
       racha++;
       mejorRacha = max(mejorRacha, racha);
-      const multiplicador = 1 + (racha - 1) * 0.1;
-      const puntosGanados = round(PUNTOS_BASE * multiplicador);
-      puntos += puntosGanados;
 
+      let puntosBaseNivel;
+      let colorEfecto;
+      let textoEfecto;
+
+      if (diferencia <= margenError / 3) {
+        puntosBaseNivel = 100;
+        colorEfecto = '#80ed99';
+        textoEfecto = '¡PERFECTO!';
+      } else if (diferencia <= (margenError / 3) * 2) {
+        puntosBaseNivel = 70;
+        colorEfecto = '#23e2ff';
+        textoEfecto = '¡MEDIO!';
+      } else {
+        puntosBaseNivel = 50;
+        colorEfecto = '#ffea80';
+        textoEfecto = '¡CASI!';
+      }
+      const puntosGanados = puntosBaseNivel + (racha * 10);
+      puntos += puntosGanados;
+      
       penalizadas[llave] = true;
       vida = constrain(vida + 8, 0, VIDA_MAX);
-      console.log("¡PERFECTO! +" + puntosGanados + " pts | Racha:", racha);
       
-      // 3. Borramos la celda acertada
-      game.fill(row, col, stack(haloWin('#80ed99'), textoWin(`¡PERFECTO!\n+${puntosGanados}`, '#80ed99')));
+      game.fill(row, col, stack(haloWin(colorEfecto), textoWin(`${textoEfecto}\n+${puntosGanados}`, colorEfecto)));
       
       tiemposPulso[llave]=millis();
       // Reiniciamos si el tablero se llenó en algún momento
       if (game.order === game.size) {
         newRound();
       }
-    } else {
+    }  else {
       penalizadas[llave] = true;
       fallos++;
       racha = 0;
       vida = constrain(vida - 15, 0, VIDA_MAX);
-      tiemposPulso[llave] = millis() - 1800;
+      tiemposPulso[llave] = millis();
       game.fill(row, col, efectoError('X', '#ff4d6d'));
       console.log("¡Fallaste! El halo estaba muy lejos. Distancia:", diferencia);
     }
