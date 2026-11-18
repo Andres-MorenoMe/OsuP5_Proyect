@@ -1,5 +1,5 @@
 'use strict';
-// hola github
+
 const BOARD = 450;//Ancho y largo del tablero
 const pulso = ['1', '2', '3', '4', '5', '6'];
 
@@ -13,10 +13,19 @@ let intervalo = 2000;//milisegundos de espera entre un pulso y otro
 //conforman el temporizador que decide cada cuanto se pone un pulso (2 segundos)
 
 let tiemposPulso={};//Areglo que guardalos tiempos en los que que nace cada pulso
+let penalizadas = {};//Evita descontar vida varias veces por la misma celda
 
 const tiempoClick =1500//1.5 seundos es el tiempo en el que el halo demora en tocar al borde,donde e jugador debera clickear la celda o fallara
 
 const margenError = 240 // ventana de tolereancia para que elclcik sea valido
+
+const VIDA_MAX = 100;
+let vida = VIDA_MAX;
+
+const PUNTOS_BASE = 100;
+let puntos = 0;
+let racha = 0;
+let mejorRacha = 0;
 
 const motionData = { t: 0, amp: 1 };
 //t es el reloj/fase del pulso
@@ -80,7 +89,29 @@ const haloWin = c => function (o) {
   if (progreso >= 1) {
     game.clear(o.row, o.col); // Borra la celda visualmente
     delete tiemposPulso[llave]; // Borra el tiempo del arreglo
+    delete penalizadas[llave];
   }
+};
+
+const textoWin = (texto, c) => function (o) {
+  const llave = `${o.row},${o.col}`;
+  const tInicio = tiemposPulso[llave];
+  if (!tInicio) return;
+
+  const progreso = constrain((millis() - tInicio) / tiempoClick, 0, 1);
+  let colorOpaco = color(c);
+  colorOpaco.setAlpha(255 * (1 - progreso));
+
+  const len = Quadrille.cellLength;
+  push();
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(len * 0.22);
+  stroke(13, 11, 22, 255 * (1 - progreso));
+  strokeWeight(3);
+  fill(colorOpaco);
+  text(texto, len / 2, len / 2 - progreso * 16);
+  pop();
 };
 
 const efectoError = (texto, c) => function (o) {
@@ -105,6 +136,7 @@ let colorDesvanecido = color(c);
   if (progreso >= 2.6) {
     game.clear(o.row, o.col);
     delete tiemposPulso[llave];
+    delete penalizadas[llave];
   }
 };
 
@@ -120,6 +152,11 @@ const EFFECTS = [
 let ipulso = 0;
 let turn = '';
 let contador = 0;
+let fallos = 0;
+
+function esFinDeJuego() {
+  return vida <= 0;
+}
 
 function endEfect(row,col,tiempoInicio){
   let diferencia= int(millis())-tiempoInicio;
@@ -127,14 +164,21 @@ function endEfect(row,col,tiempoInicio){
   if(diferencia>=duracion){
   game.clear(row,col);
   delete tiemposPulso[`${row},${col}`];
+  delete penalizadas[`${row},${col}`];
     }
  }
 
 function verificarTimeout(row,col){
-let tiempoInicial= tiemposPulso[`${row},${col}`];
+const llave = `${row},${col}`;
+let tiempoInicial= tiemposPulso[llave];
+if (!tiempoInicial || penalizadas[llave]) return;
 let limite=1800;
 let difer=int(millis())-tiempoInicial;
   if(difer>=limite){
+  penalizadas[llave] = true;
+  fallos++;
+  racha = 0;
+  vida = constrain(vida - 20, 0, VIDA_MAX);
   game.fill(row, col,efectoError('X','#ff4d6d'));
   }
   ;
@@ -151,7 +195,60 @@ function newRound() {
   game = createQuadrille(n, n);
   tiempoBase = millis();
   tiemposPulso = {};
+  penalizadas = {};
+  vida = VIDA_MAX;
+  contador = 0;
+  fallos = 0;
+  puntos = 0;
+  racha = 0;
+  mejorRacha = 0;
   //se vacia el arreglo de los tiempos de cada pulso
+}
+
+function dibujarBarraVida() {
+  push();
+  const margen = 12;
+  const x = margen;
+  const y = BOARD + 8;
+  const anchoTotal = BOARD - margen * 2;
+  const alto = 24;
+
+  // Fondo de la barra de vida
+  noStroke();
+  fill('#1b1630');
+  rect(x, y, anchoTotal, alto, 6);
+
+  // Relleno proporcional a la vida actual
+  const anchoVida = anchoTotal * (vida / VIDA_MAX);
+  if (vida > 50) {
+    fill('#80ed99');
+  } else if (vida > 25) {
+    fill('#ffd166');
+  } else {
+    fill('#ff4d6d');
+  }
+  rect(x, y, anchoVida, alto, 6);
+
+  // Contorno de la barra
+  noFill();
+  stroke('#3a3260');
+  strokeWeight(2);
+  rect(x, y, anchoTotal, alto, 6);
+
+  // Texto de vida, racha y puntuación
+  noStroke();
+  fill('#ffffff');
+  textSize(12);
+  textStyle(BOLD);
+  textAlign(LEFT, CENTER);
+  text(`VIDA: ${vida}%`, x + 10, y + alto / 2);
+
+  textAlign(CENTER, CENTER);
+  text(`RACHA: ${racha}x`, x + anchoTotal / 2, y + alto / 2);
+
+  textAlign(RIGHT, CENTER);
+  text(`PUNTOS: ${puntos}`, x + anchoTotal - 10, y + alto / 2);
+  pop();
 }
 
 function draw() {
@@ -159,16 +256,40 @@ function draw() {
 
   motionData.t += 0.05;
   drawQuadrille(game, { outline: '#241f38', outlineWeight: 2, cellParams: motionData });
-  generador();
-  if(game.order!=0){
-  for (let row = 0; row < n; row++) {
 
-    for (let col = 0; col < n; col++) {
-        verificarTimeout(row,col);
-      //
-      }
+  if (!esFinDeJuego()) {
+    generador();
+    if(game.order!=0){
+    for (let row = 0; row < n; row++) {
+
+      for (let col = 0; col < n; col++) {
+          verificarTimeout(row,col);
+        //
+        }
+    }
+    }//fin del if
   }
-  }//fin del if
+
+  dibujarBarraVida();
+
+  if (esFinDeJuego()) {
+    push();
+    fill(0, 0, 0, 180);
+    rect(0, 0, BOARD, BOARD);
+    fill('#ff4d6d');
+    textAlign(CENTER, CENTER);
+    textSize(48);
+    textStyle(BOLD);
+    text('WASTED', BOARD / 2, BOARD / 2 - 35);
+    fill('#ffffff');
+    textSize(15);
+    textStyle(NORMAL);
+    text('Puntos: ' + puntos + ' · Mejor racha: ' + mejorRacha + 'x', BOARD / 2, BOARD / 2 + 5);
+    text('Aciertos: ' + contador + ' · Fallos: ' + fallos, BOARD / 2, BOARD / 2 + 30);
+    textSize(13);
+    text('Presiona una tecla para reiniciar', BOARD / 2, BOARD / 2 + 60);
+    pop();
+  }
 }
 
 function generador() {
@@ -186,19 +307,26 @@ function generador() {
       col = int(random(0, n));
     } while (!game.isEmpty(row, col));
 
+    const llave = `${row},${col}`;
+    delete penalizadas[llave];
+
     ipulso = (ipulso + 1) % pulso.length;
     game.fill(row, col, EFFECTS[ipulso % EFFECTS.length]);
 
-    tiemposPulso[`${row},${col}`] = millis();
+    tiemposPulso[llave] = millis();
     //se guardan las coordenadas del pulso generdo en la matriz
   }
 }
 
 function mousePressed() {
+  if (esFinDeJuego()) return;
+
   const row = game.mouseRow;
   const col = game.mouseCol;
-  if (game.isValid(row, col) && !game.isEmpty(row, col)) {
-  let tempo = tiemposPulso[`${row},${col}`]
+  const llave = `${row},${col}`;
+
+  if (game.isValid(row, col) && !game.isEmpty(row, col) && !penalizadas[llave]) {
+  let tempo = tiemposPulso[llave]
   const tiempoVida= int(millis())-tempo;
   //devuelve el tiempo de vida de la celda
 
@@ -210,18 +338,32 @@ function mousePressed() {
     // 2. Definimos una tolerancia (0 es perfecto, 0.15 es un buen margen para humanos)
     if (diferencia<=margenError) {
       contador++;
-      console.log("¡PERFECTO! Puntos:", contador);
+      racha++;
+      mejorRacha = max(mejorRacha, racha);
+      const multiplicador = 1 + (racha - 1) * 0.1;
+      const puntosGanados = round(PUNTOS_BASE * multiplicador);
+      puntos += puntosGanados;
+
+      penalizadas[llave] = true;
+      vida = constrain(vida + 8, 0, VIDA_MAX);
+      console.log("¡PERFECTO! +" + puntosGanados + " pts | Racha:", racha);
       
       // 3. Borramos la celda acertada
-      game.fill(row, col, haloWin('#80ed99'));
+      game.fill(row, col, stack(haloWin('#80ed99'), textoWin(`¡PERFECTO!\n+${puntosGanados}`, '#80ed99')));
       
-      tiemposPulso[`${row},${col}`]=millis();
+      tiemposPulso[llave]=millis();
       endEfect(row,col,millis());
       // Reiniciamos si el tablero se llenó en algún momento
       if (game.order === game.size) {
         newRound();
       }
     } else {
+      penalizadas[llave] = true;
+      fallos++;
+      racha = 0;
+      vida = constrain(vida - 15, 0, VIDA_MAX);
+      tiemposPulso[llave] = millis() - 1800;
+      game.fill(row, col, efectoError('X', '#ff4d6d'));
       console.log("¡Fallaste! El halo estaba muy lejos. Distancia:", diferencia);
     }
 
