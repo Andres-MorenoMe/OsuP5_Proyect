@@ -153,6 +153,32 @@ let turn = '';
 let contador = 0;
 let fallos = 0;
 
+//----------------------------------------------------------------------
+// NUEVO: MENÚ PRINCIPAL Y RITMO PROGRESIVO
+// Variables y constantes que usan el menú y la aceleración, las funciones que
+// las manejan estan mas abajo (despues de dibujarBarraVida) y las inclusiones
+// dentro de las funciones que ya existian estan marcadas con //nuevo
+//----------------------------------------------------------------------
+
+const TITULO = 'Osu de temu';//nombre que se muestra en el menú, cámbialo por el del juego
+
+let estado;//'menu' mientras se elige el ritmo, 'juego' cuando la partida ya está corriendo (se inicia en setup)
+let idificultad = 0;//indice del ritmo elegido dentro de DIFICULTADES
+let tiempoRonda = 0;//momento en el que arrancó la ronda, de aquí sale la aceleración
+
+const TIEMPO_ACELERA = 10000;//cada cuantos milisegundos el intervalo se multiplica por el factor del ritmo (0.95 = 5% más rápido)
+
+//cada ritmo define con que intervalo arranca (base), hasta cuanto puede acelerar (piso) y que tan rápido lo hace (factor)
+//base y piso estan en milisegundos, igual que la variable intervalo
+const DIFICULTADES = [
+  { nombre: 'FÁCIL',   color: '#80ed99', base: 2000, piso: 1200, factor: 0.95 },
+  { nombre: 'NORMAL',  color: '#ffd166', base: 1500, piso: 900,  factor: 0.93 },
+  { nombre: 'DIFÍCIL', color: '#ff4d6d', base: 1000, piso: 600,  factor: 0.92 }
+];//los colores son los mismos del semáforo de la barra de vida
+
+//posicion y tamaño de las filas del selector, la fila i queda en y + i * sep
+const FILA = { x: 40, y: 200, ancho: BOARD - 80, alto: 56, sep: 70 };
+
 function esFinDeJuego() {
   return vida <= 0;
 }
@@ -179,6 +205,7 @@ function setup() {
   createCanvas(BOARD, BOARD + 40);
   textAlign(CENTER, CENTER);
   newRound();
+  estado = 'menu';//nuevo: el sketch arranca en el menú, la partida empieza al elegir un ritmo
 }
 
 function newRound() {
@@ -194,6 +221,8 @@ function newRound() {
   racha = 0;
   mejorRacha = 0;
   //se vacia el arreglo de los tiempos de cada pulso
+  tiempoRonda = millis();//nuevo: la aceleración vuelve a empezar con cada ronda
+  intervalo = DIFICULTADES[idificultad].base;//nuevo: el ritmo arranca en el intervalo base de la dificultad elegida
 }
 
 function dibujarBarraVida() {
@@ -242,13 +271,148 @@ function dibujarBarraVida() {
   pop();
 }
 
+//----------------------------------------------------------------------
+// NUEVO: funciones del menú y del ritmo progresivo
+//----------------------------------------------------------------------
+
+function actualizarRitmo() {
+  const d = DIFICULTADES[idificultad];
+  const periodos = (millis() - tiempoRonda) / TIEMPO_ACELERA;//cuantos periodos de aceleración lleva la ronda
+  intervalo = max(d.piso, d.base * pow(d.factor, periodos));//baja de forma exponencial pero nunca pasa del piso
+}//se llama desde draw() justo antes de generador(), que es quien lee intervalo
+
+function dibujarMenu() {
+  push();
+  noStroke();
+  textAlign(CENTER, CENTER);
+
+  fill('#ff9ed2');
+  textSize(48);//mismo tamaño que el cartel de WASTED
+  textStyle(BOLD);
+  text(TITULO, BOARD / 2, 90);
+
+  fill('#ffffff');
+  textSize(15);
+  textStyle(NORMAL);
+  text('Elige tu ritmo', BOARD / 2, 140);
+
+  for (let i = 0; i < DIFICULTADES.length; i++) {
+    dibujarFilaRitmo(i);
+  }
+
+  fill(255, 140);
+  textSize(12);
+  text('↑ ↓ para elegir  ·  Enter o clic para jugar', BOARD / 2, BOARD + 20);
+  pop();
+
+  cursor(filaBajoMouse() === -1 ? ARROW : HAND);//manito cuando se puede hacer clic
+}
+
+function dibujarFilaRitmo(i) {
+  const d = DIFICULTADES[i];
+  const y = FILA.y + i * FILA.sep;
+  const elegida = i === idificultad;
+  const alfa = elegida ? 255 : 90;//solo la fila elegida late con todo el brillo
+  push();
+
+  //panel de la fila, la elegida se resalta con el color de su ritmo
+  fill('#1b1630');
+  stroke(elegida ? d.color : '#3a3260');
+  strokeWeight(elegida ? 3 : 2);
+  rect(FILA.x, y, FILA.ancho, FILA.alto, 6);
+
+  //pulso de muestra: nace un halo cada d.base milisegundos, así se ve el ritmo de cada dificultad
+  const cx = FILA.x + 36;
+  const cy = y + FILA.alto / 2;
+  const progreso = (millis() % d.base) / d.base;//0 cuando nace el halo y 1 cuando llega al pulso
+  noFill();
+  stroke(255, alfa);
+  strokeWeight(2);
+  circle(cx, cy, 16 * (1 + 2 * (1 - progreso)));//halo que se encoge, igual que en halo()
+  fill(d.color);
+  circle(cx, cy, 16);//pulso con su borde blanco, igual que spot() y borde()
+
+  //nombre del ritmo y su velocidad en pulsos por minuto, desde la base hasta el piso
+  noStroke();
+  fill(elegida ? d.color : '#ffffff');
+  textAlign(LEFT, CENTER);
+  textSize(18);
+  textStyle(BOLD);
+  text(d.nombre, FILA.x + 70, cy);
+
+  fill(255, 160);
+  textAlign(RIGHT, CENTER);
+  textSize(12);
+  textStyle(NORMAL);
+  text(`${round(60000 / d.base)} → ${round(60000 / d.piso)} BPM`, FILA.x + FILA.ancho - 16, cy);
+  pop();
+}
+
+function filaBajoMouse() {
+  for (let i = 0; i < DIFICULTADES.length; i++) {
+    const y = FILA.y + i * FILA.sep;
+    if (mouseX >= FILA.x && mouseX <= FILA.x + FILA.ancho && mouseY >= y && mouseY <= y + FILA.alto) {
+      return i;
+    }
+  }
+  return -1;//el mouse no está sobre ninguna fila
+}
+
+function iniciarPartida() {
+  estado = 'juego';
+  cursor(ARROW);
+  newRound();//tablero, vida y puntos desde cero, y el ritmo de la dificultad elegida
+}
+
+function volverAlMenu() {
+  estado = 'menu';
+  newRound();//deja todo limpio para que no quede ni la partida anterior ni el cartel de WASTED
+}
+
+function clickMenu() {
+  const fila = filaBajoMouse();
+  if (fila === -1) return;
+  idificultad = fila;
+  iniciarPartida();
+}//se llama desde mousePressed() cuando se está en el menú
+
+function teclaMenu() {
+  const total = DIFICULTADES.length;
+  if (keyCode === UP_ARROW || keyCode === LEFT_ARROW) {
+    idificultad = (idificultad + total - 1) % total;
+    return true;
+  }
+  if (keyCode === DOWN_ARROW || keyCode === RIGHT_ARROW) {
+    idificultad = (idificultad + 1) % total;
+    return true;
+  }
+  if (keyCode === ENTER) {
+    iniciarPartida();
+    return true;
+  }
+  return false;
+}//se llama desde keyPressed() cuando se está en el menú, devuelve true si la tecla era del menú
+
+function mouseMoved() {
+  if (estado !== 'menu') return;
+  const fila = filaBajoMouse();
+  if (fila !== -1) idificultad = fila;//la selección sigue al mouse, con las flechas también se cambia
+}//evento de p5 que el sketch no usaba, por eso es una función aparte
+
 function draw() {
   background('#0d0b16');
+
+  //nuevo: en el menú solo se dibuja el menú, el tablero y el generador no corren hasta elegir un ritmo
+  if (estado === 'menu') {
+    dibujarMenu();
+    return;
+  }
 
   motionData.t += 0.05;
   drawQuadrille(game, { outline: '#241f38', outlineWeight: 2, cellParams: motionData });
 
   if (!esFinDeJuego()) {
+    actualizarRitmo();//nuevo: acorta el intervalo según el tiempo de la ronda, antes de que generador() lo use
     generador();
     if(game.order!=0){
     for (let row = 0; row < n; row++) {
@@ -279,6 +443,7 @@ function draw() {
     text('Aciertos: ' + contador + ' · Fallos: ' + fallos, BOARD / 2, BOARD / 2 + 30);
     textSize(13);
     text('Presiona una tecla para reiniciar', BOARD / 2, BOARD / 2 + 60);
+    text('Esc para volver al menú', BOARD / 2, BOARD / 2 + 85);//nuevo: salida hacia el menú
     pop();
   }
 }
@@ -325,6 +490,12 @@ function generador() {
 }
 
 function mousePressed() {
+  //nuevo: en el menú el clic elige el ritmo y no se procesa como un clic sobre el tablero
+  if (estado === 'menu') {
+    clickMenu();
+    return;
+  }
+
   if (esFinDeJuego()) return;
 
   const row = game.mouseRow;
@@ -395,6 +566,18 @@ function mousePressed() {
 }
 
 function keyPressed() {
+  //nuevo: en el menú las teclas eligen el ritmo y no reinician la partida
+  if (estado === 'menu') {
+    if (teclaMenu()) return false;//false evita que las flechas muevan la página
+    return;
+  }
+
+  //nuevo: Esc vuelve al menú en cualquier momento de la partida
+  if (keyCode === ESCAPE) {
+    volverAlMenu();
+    return;
+  }
+
   if (key.length !== 1) {
     return;
   }
